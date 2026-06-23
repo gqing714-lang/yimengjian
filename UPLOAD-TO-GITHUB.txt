@@ -1,0 +1,7 @@
+上传到 GitHub 仓库根目录的文件：
+
+index.html
+character-avatar.jpg
+README.md
+
+不要只上传 ZIP。请先解压，然后把以上三个文件直接上传到仓库根目录。
