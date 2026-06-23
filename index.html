@@ -435,6 +435,145 @@ input::placeholder { color: #555; }
 .tab-content { display: none; }
 .tab-content.active { display: block; }
 .font-options { display: flex; flex-direction: column; gap: 4px; }
+
+/* ── Multi-save UI ── */
+.load-menu { margin-bottom: 16px; }
+.load-menu .inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.load-menu-arrow {
+  flex-shrink: 0;
+  color: #fff;
+  font-size: 16px;
+}
+
+.overlay-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.overlay-title-row .log-header { margin-bottom: 0; }
+
+.overlay-close {
+  width: 26px;
+  height: 26px;
+  border: 1px solid #555;
+  background: transparent;
+  color: #aaa;
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.overlay-close:hover {
+  color: #fff;
+  border-color: #fff;
+}
+
+.save-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.save-empty {
+  color: #666;
+  text-align: center;
+  padding: 28px 10px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+.save-card {
+  background: var(--panel-bg);
+  padding: var(--panel-frame-gap);
+  box-shadow: var(--panel-shadow);
+}
+.save-card-inner {
+  border: var(--panel-line);
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.save-load {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: #fff;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+.save-title {
+  font-size: 12px;
+  line-height: 1.6;
+  letter-spacing: 0.08em;
+  overflow-wrap: anywhere;
+}
+.save-meta {
+  margin-top: 3px;
+  color: #777;
+  font-size: 10px;
+  line-height: 1.6;
+}
+.save-delete {
+  flex-shrink: 0;
+  border: 1px solid #444;
+  background: transparent;
+  color: #777;
+  padding: 5px 8px;
+  font-family: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+.save-delete:hover {
+  color: #fff;
+  border-color: #aaa;
+}
+
+#load-overlay .overlay-box {
+  max-width: 440px;
+  max-height: 78vh;
+}
+#load-overlay .overlay-content {
+  max-height: calc(78vh - 6px);
+}
+
+#confirm-overlay {
+  z-index: 1001;
+}
+#confirm-overlay .overlay-box {
+  max-width: 330px;
+}
+.confirm-title {
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  margin-bottom: 10px;
+}
+.confirm-message {
+  color: #aaa;
+  font-size: 11px;
+  line-height: 1.9;
+  white-space: pre-line;
+}
+.confirm-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+.confirm-actions .connect-btn {
+  flex: 1;
+  margin-top: 0;
+}
+.confirm-actions .confirm-danger .inner {
+  color: #d88;
+}
+
 </style>
 </head>
 <body>
@@ -556,19 +695,16 @@ input::placeholder { color: #555; }
       <div class="sub">一 梦 间</div>
       <div class="title">虚见相</div>
     </div>
-    <!-- Continue from save -->
-    <div id="continue-section" style="display:none; margin-bottom:16px;">
-      <button class="scenario-btn rpg-btn" id="btn-continue" style="width:100%;">
-        <div class="inner" style="border-color:#888; display:flex; justify-content:space-between; align-items:center;">
+    <!-- Load menu entry -->
+    <div class="load-menu">
+      <button class="scenario-btn rpg-btn" id="btn-open-load" type="button">
+        <div class="inner">
           <div>
-            <div class="s-title" id="save-info-title">继续</div>
-            <div class="s-desc" id="save-info-desc"></div>
+            <div class="s-title">读档</div>
+            <div class="s-desc" id="save-count-text">暂无存档</div>
           </div>
-          <div style="font-size:18px; color:#fff;">▶</div>
+          <div class="load-menu-arrow">▶</div>
         </div>
-      </button>
-      <button id="btn-delete-save" style="background:none; border:none; color:#555; font-family:inherit; font-size:9px; cursor:pointer; margin-top:4px; letter-spacing:0.05em;">
-        删除存档
       </button>
     </div>
 
@@ -642,6 +778,38 @@ input::placeholder { color: #555; }
         <input type="text" id="chat-input" placeholder="请输入文本...">
       </div></div>
       <button class="send-btn rpg-btn" id="btn-send">▶</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══ LOAD Overlay ═══ -->
+<div class="overlay" id="load-overlay">
+  <div class="overlay-box overlay-panel" id="load-box">
+    <div class="overlay-content">
+      <div class="overlay-title-row">
+        <div class="log-header">— 读 档 —</div>
+        <button class="overlay-close rpg-btn" id="btn-close-load" type="button" aria-label="关闭">×</button>
+      </div>
+      <div class="save-list" id="save-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ CONFIRM Overlay ═══ -->
+<div class="overlay" id="confirm-overlay">
+  <div class="overlay-box overlay-panel" id="confirm-box">
+    <div class="overlay-content">
+      <div class="confirm-title" id="confirm-title">确认</div>
+      <div class="confirm-message" id="confirm-message"></div>
+      <div class="confirm-actions">
+        <button class="connect-btn rpg-btn" id="confirm-cancel" type="button">
+          <div class="inner">取消</div>
+        </button>
+        <button class="connect-btn rpg-btn" id="confirm-ok" type="button">
+          <div class="inner" id="confirm-ok-text">确认</div>
+        </button>
+      </div>
     </div>
   </div>
 </div>
@@ -1224,6 +1392,21 @@ const logOverlay = document.getElementById('log-overlay');
 const logBox = document.getElementById('log-box');
 const logEntries = document.getElementById('log-entries');
 
+const loadOverlay = document.getElementById('load-overlay');
+const loadBox = document.getElementById('load-box');
+const saveList = document.getElementById('save-list');
+const saveCountText = document.getElementById('save-count-text');
+const btnOpenLoad = document.getElementById('btn-open-load');
+const btnCloseLoad = document.getElementById('btn-close-load');
+
+const confirmOverlay = document.getElementById('confirm-overlay');
+const confirmBox = document.getElementById('confirm-box');
+const confirmTitle = document.getElementById('confirm-title');
+const confirmMessage = document.getElementById('confirm-message');
+const confirmOkText = document.getElementById('confirm-ok-text');
+const confirmOk = document.getElementById('confirm-ok');
+const confirmCancel = document.getElementById('confirm-cancel');
+
 /* ── Render Scenarios ── */
 SCENARIOS.forEach(s => {
   const btn = document.createElement('button');
@@ -1427,7 +1610,7 @@ document.getElementById('btn-back').addEventListener('click', () => {
   clearTypingTimers();
   chatScreen.classList.remove('active');
   selectScreen.classList.add('active');
-  checkSaveExists();
+  updateSaveMenu();
 });
 
 /* ── API Call (OpenAI-compatible) ── */
@@ -1511,38 +1694,274 @@ chatInput.addEventListener('keydown', (e) => {
 });
 
 /* ── Save / Load ── */
-function saveGame() {
-  const saveData = {
-    scenario: currentScenario,
-    scenes: scenes,
-    scenePage: scenePage,
-    location: currentLocation,
-    dialogues: dialogues,
-    log: log,
-    messages: messages,
-    timestamp: Date.now(),
-  };
-  localStorage.setItem('galgame_save', JSON.stringify(saveData));
-  /* Flash feedback */
-  const btn = document.getElementById('btn-save-game');
-  btn.style.opacity = '0.3';
-  setTimeout(() => { btn.style.opacity = '1'; }, 300);
+const SAVE_STORAGE_KEY = 'galgame_saves';
+const LEGACY_SAVE_KEY = 'galgame_save';
+
+function createSaveId() {
+  const random = Math.random().toString(36).slice(2, 9);
+  return `save-${Date.now().toString(36)}-${random}`;
 }
 
-function loadGame() {
-  const raw = localStorage.getItem('galgame_save');
-  if (!raw) return false;
+function readSaves() {
   try {
-    const save = JSON.parse(raw);
+    const parsed = JSON.parse(localStorage.getItem(SAVE_STORAGE_KEY) || '[]');
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(save => save && typeof save === 'object' && save.id)
+      .sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0));
+  } catch (error) {
+    console.warn('读取存档失败：', error);
+    return [];
+  }
+}
+
+function writeSaves(saves) {
+  localStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(saves));
+}
+
+function migrateLegacySave() {
+  const raw = localStorage.getItem(LEGACY_SAVE_KEY);
+  if (!raw) return;
+
+  try {
+    const legacy = JSON.parse(raw);
+    const saves = readSaves();
+    const timestamp = Number(legacy.timestamp) || Date.now();
+    const alreadyMigrated = saves.some(save =>
+      save.legacy === true ||
+      (
+        Number(save.timestamp) === timestamp &&
+        save.scenario?.id === legacy.scenario?.id
+      )
+    );
+
+    if (!alreadyMigrated) {
+      saves.push({
+        ...legacy,
+        id: createSaveId(),
+        timestamp,
+        legacy: true,
+        version: 2,
+      });
+      writeSaves(saves);
+    }
+
+    localStorage.removeItem(LEGACY_SAVE_KEY);
+  } catch (error) {
+    console.warn('迁移旧存档失败：', error);
+  }
+}
+
+function formatSaveTime(timestamp) {
+  const date = new Date(Number(timestamp) || Date.now());
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
+function updateSaveMenu() {
+  const count = readSaves().length;
+  saveCountText.textContent = count > 0
+    ? `已有 ${count} 个存档`
+    : '暂无存档';
+}
+
+function renderSaveList() {
+  const saves = readSaves();
+  saveList.innerHTML = '';
+
+  if (saves.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'save-empty';
+    empty.textContent = '还没有存档。';
+    saveList.appendChild(empty);
+    return;
+  }
+
+  saves.forEach((save, index) => {
+    const card = document.createElement('div');
+    card.className = 'save-card';
+
+    const inner = document.createElement('div');
+    inner.className = 'save-card-inner';
+
+    const loadButton = document.createElement('button');
+    loadButton.type = 'button';
+    loadButton.className = 'save-load rpg-btn';
+
+    const title = document.createElement('div');
+    title.className = 'save-title';
+    title.textContent =
+      save.scenario?.title ||
+      save.title ||
+      `存档 ${String(saves.length - index).padStart(2, '0')}`;
+
+    const meta = document.createElement('div');
+    meta.className = 'save-meta';
+    meta.textContent =
+      `${formatSaveTime(save.timestamp)} · ${(save.log || []).length} 条记录`;
+
+    loadButton.append(title, meta);
+    loadButton.addEventListener('click', () => {
+      loadGame(save.id);
+    });
+
+    const deleteButton = document.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.className = 'save-delete rpg-btn';
+    deleteButton.textContent = '删除';
+    deleteButton.addEventListener('click', async (event) => {
+      event.stopPropagation();
+
+      const confirmed = await askConfirmation({
+        title: '删除存档',
+        message: `确定删除「${title.textContent}」吗？\n删除后无法恢复。`,
+        confirmText: '删除',
+        danger: true,
+      });
+
+      if (!confirmed) return;
+
+      const nextSaves = readSaves().filter(item => item.id !== save.id);
+      writeSaves(nextSaves);
+      renderSaveList();
+      updateSaveMenu();
+    });
+
+    inner.append(loadButton, deleteButton);
+    card.appendChild(inner);
+    saveList.appendChild(card);
+  });
+}
+
+let confirmResolver = null;
+
+function closeConfirmation(result) {
+  confirmOverlay.classList.remove('active');
+
+  if (confirmResolver) {
+    const resolve = confirmResolver;
+    confirmResolver = null;
+    resolve(result);
+  }
+}
+
+function askConfirmation({
+  title = '确认',
+  message = '',
+  confirmText = '确认',
+  danger = false,
+} = {}) {
+  if (confirmResolver) {
+    confirmResolver(false);
+    confirmResolver = null;
+  }
+
+  confirmTitle.textContent = title;
+  confirmMessage.textContent = message;
+  confirmOkText.textContent = confirmText;
+  confirmOk.classList.toggle('confirm-danger', danger);
+  confirmOverlay.classList.add('active');
+  confirmOverlay.classList.add('overlay-bg');
+
+  return new Promise(resolve => {
+    confirmResolver = resolve;
+  });
+}
+
+confirmOk.addEventListener('click', () => closeConfirmation(true));
+confirmCancel.addEventListener('click', () => closeConfirmation(false));
+
+confirmOverlay.addEventListener('click', event => {
+  if (event.target === confirmOverlay) closeConfirmation(false);
+});
+confirmBox.addEventListener('click', event => event.stopPropagation());
+
+btnOpenLoad.addEventListener('click', () => {
+  renderSaveList();
+  loadOverlay.classList.add('active');
+  loadOverlay.classList.add('overlay-bg');
+});
+
+function closeLoadOverlay() {
+  loadOverlay.classList.remove('active');
+}
+
+btnCloseLoad.addEventListener('click', closeLoadOverlay);
+loadOverlay.addEventListener('click', event => {
+  if (event.target === loadOverlay) closeLoadOverlay();
+});
+loadBox.addEventListener('click', event => event.stopPropagation());
+
+async function saveGame() {
+  if (!currentScenario) return;
+
+  const confirmed = await askConfirmation({
+    title: '确认存档',
+    message: '是否确认保存当前进度？\n本次保存会新增一个存档，不会覆盖已有存档。',
+    confirmText: '保存',
+  });
+
+  if (!confirmed) return;
+
+  const saveData = {
+    id: createSaveId(),
+    version: 2,
+    scenario: currentScenario,
+    scenes: [...scenes],
+    scenePage,
+    location: currentLocation,
+    dialogues: [...dialogues],
+    log: [...log],
+    messages: [...messages],
+    timestamp: Date.now(),
+  };
+
+  try {
+    const saves = readSaves();
+    saves.unshift(saveData);
+    writeSaves(saves);
+    updateSaveMenu();
+
+    const btn = document.getElementById('btn-save-game');
+    const oldTitle = btn.title;
+    btn.title = '已保存';
+    btn.style.opacity = '0.3';
+
+    setTimeout(() => {
+      btn.style.opacity = '1';
+      btn.title = oldTitle;
+    }, 450);
+  } catch (error) {
+    console.error('保存失败：', error);
+    alert('保存失败：浏览器存储空间可能已经用满。');
+  }
+}
+
+function loadGame(saveId) {
+  const save = readSaves().find(item => item.id === saveId);
+  if (!save) {
+    renderSaveList();
+    updateSaveMenu();
+    return false;
+  }
+
+  try {
     currentScenario = save.scenario;
-    scenes = save.scenes;
-    scenePage = save.scenePage || 0;
+    scenes = Array.isArray(save.scenes) ? [...save.scenes] : [];
+    scenePage = Number(save.scenePage) || 0;
     currentLocation = save.location || '';
-    dialogues = save.dialogues;
-    log = save.log || [];
-    messages = save.messages || [];
+    dialogues = Array.isArray(save.dialogues) ? [...save.dialogues] : [];
+    log = Array.isArray(save.log) ? [...save.log] : [];
+    messages = Array.isArray(save.messages) ? [...save.messages] : [];
     loading = false;
 
+    closeLoadOverlay();
     selectScreen.classList.remove('active');
     chatScreen.classList.add('active');
     userMsgContainer.innerHTML = '';
@@ -1552,42 +1971,16 @@ function loadGame() {
     renderDialogues(false);
     applyAvatar();
     return true;
-  } catch (e) {
+  } catch (error) {
+    console.error('读档失败：', error);
     return false;
   }
 }
 
-function checkSaveExists() {
-  const raw = localStorage.getItem('galgame_save');
-  if (!raw) {
-    document.getElementById('continue-section').style.display = 'none';
-    return;
-  }
-  try {
-    const save = JSON.parse(raw);
-    document.getElementById('continue-section').style.display = 'block';
-    document.getElementById('save-info-title').textContent = '继续：' + (save.scenario?.title || '未知');
-    const date = new Date(save.timestamp);
-    const timeStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-    document.getElementById('save-info-desc').textContent = timeStr + ' · ' + (save.log?.length || 0) + ' 条记录';
-  } catch (e) {
-    document.getElementById('continue-section').style.display = 'none';
-  }
-}
-checkSaveExists();
+migrateLegacySave();
+updateSaveMenu();
 
 document.getElementById('btn-save-game').addEventListener('click', saveGame);
-
-document.getElementById('btn-continue').addEventListener('click', () => {
-  loadGame();
-});
-
-document.getElementById('btn-delete-save').addEventListener('click', () => {
-  if (confirm('确定删除存档？')) {
-    localStorage.removeItem('galgame_save');
-    checkSaveExists();
-  }
-});
 </script>
 </body>
 </html>
