@@ -574,6 +574,58 @@ input::placeholder { color: #555; }
   color: #d88;
 }
 
+/* ── Scenario Editor ── */
+.scenario-editor-field { margin-bottom: 12px; }
+.scenario-editor-field .settings-label { margin-bottom: 4px; }
+.scenario-editor-field textarea,
+.scenario-editor-field input[type="text"] {
+  width: 100%; background: #111; border: 1px solid #444; color: #ccc;
+  padding: 8px 10px; font-family: inherit; font-size: 11px; line-height: 1.7;
+  resize: vertical; box-sizing: border-box; outline: none;
+  letter-spacing: 0.03em;
+}
+.scenario-editor-field textarea:focus,
+.scenario-editor-field input[type="text"]:focus { border-color: #888; }
+.scenario-editor-field .field-hint {
+  color: #555; font-size: 9px; margin-top: 3px; line-height: 1.5;
+}
+.scenario-editor-actions {
+  display: flex; gap: 8px; margin-top: 14px;
+}
+.scenario-editor-actions .connect-btn { flex: 1; margin-top: 0; }
+
+.scenario-btn-wrap {
+  position: relative;
+}
+.scenario-btn-wrap .scenario-btn { width: 100%; }
+.scenario-actions {
+  position: absolute; top: 0; right: 0; bottom: 0;
+  display: flex; align-items: center; gap: 2px;
+  padding-right: 8px; z-index: 1;
+}
+.scenario-action-btn {
+  background: transparent; border: 1px solid #444; color: #777;
+  width: 24px; height: 24px; padding: 0;
+  font-family: inherit; font-size: 11px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.scenario-action-btn:hover { color: #fff; border-color: #aaa; }
+.scenario-action-btn.danger:hover { color: #d88; border-color: #d88; }
+
+.add-scenario-btn {
+  background: none; border: 1px dashed #444; color: #666;
+  width: 100%; padding: 12px; font-family: inherit; font-size: 11px;
+  letter-spacing: 0.08em; cursor: pointer; margin-top: 8px;
+}
+.add-scenario-btn:hover { color: #aaa; border-color: #888; }
+
+#scenario-edit-overlay .overlay-box {
+  max-width: 440px; max-height: 82vh;
+}
+#scenario-edit-overlay .overlay-content {
+  max-height: calc(82vh - 6px); overflow-y: auto;
+}
+
 </style>
 </head>
 <body>
@@ -710,6 +762,7 @@ input::placeholder { color: #555; }
 
     <div class="settings-label" style="margin-bottom:8px; color:#666;">— 新的开始 —</div>
     <div class="scenario-list" id="scenario-list"></div>
+    <button class="add-scenario-btn rpg-btn" id="btn-add-scenario" type="button">＋ 新建场景</button>
     <div style="margin-top: 16px; text-align: center;">
       <button class="rpg-btn" id="btn-settings" style="background:none; border:none; color:#999; font-family:inherit; font-size:10px; cursor:pointer; letter-spacing:0.1em;">
         ⚙ 设置
@@ -815,6 +868,62 @@ input::placeholder { color: #555; }
 </div>
 
 <!-- ═══ LOG Overlay ═══ -->
+
+<!-- ═══ Scenario Editor Overlay ═══ -->
+<div class="overlay" id="scenario-edit-overlay">
+  <div class="overlay-box overlay-panel" id="scenario-edit-box">
+    <div class="overlay-content">
+      <div class="overlay-title-row">
+        <div class="log-header" id="scenario-edit-title">— 新 建 场 景 —</div>
+        <button class="overlay-close rpg-btn" id="btn-close-scenario-edit" type="button" aria-label="关闭">×</button>
+      </div>
+
+      <div class="scenario-editor-field">
+        <div class="settings-label">标题</div>
+        <input type="text" id="se-title" placeholder="宵夜时间">
+      </div>
+
+      <div class="scenario-editor-field">
+        <div class="settings-label">简介</div>
+        <input type="text" id="se-desc" placeholder="场景选择页显示的一句话描述">
+      </div>
+
+      <div class="scenario-editor-field">
+        <div class="settings-label">地点</div>
+        <input type="text" id="se-location" placeholder="一梦间・万事屋・接待间｜夜">
+      </div>
+
+      <div class="scenario-editor-field">
+        <div class="settings-label">开场旁白</div>
+        <textarea id="se-scenes" rows="5" placeholder="每一行是一段旁白，可翻页显示。&#10;第一段旁白……&#10;第二段旁白……"></textarea>
+        <div class="field-hint">每行一段，对应场景框内的分页</div>
+      </div>
+
+      <div class="scenario-editor-field">
+        <div class="settings-label">开场台词</div>
+        <textarea id="se-dialogues" rows="3" placeholder="每一行是一句台词。&#10;欢迎，我的客人。"></textarea>
+        <div class="field-hint">每行一句，按顺序显示在对话气泡中</div>
+      </div>
+
+      <div class="scenario-editor-field">
+        <div class="settings-label">AI 背景提示</div>
+        <textarea id="se-context" rows="4" placeholder="描述当前场景的情境，AI 会根据这段文字理解当前状态。"></textarea>
+        <div class="field-hint">不会直接显示，仅作为 system prompt 的一部分发送给 AI</div>
+      </div>
+
+      <div class="scenario-editor-actions">
+        <button class="connect-btn rpg-btn" id="btn-scenario-cancel" type="button">
+          <div class="inner">取消</div>
+        </button>
+        <button class="connect-btn rpg-btn" id="btn-scenario-save" type="button">
+          <div class="inner">保存</div>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ LOG Overlay (original) ═══ -->
 <div class="overlay" id="log-overlay">
   <div class="overlay-box overlay-panel" id="log-box">
     <div class="overlay-content">
@@ -1407,14 +1516,194 @@ const confirmOkText = document.getElementById('confirm-ok-text');
 const confirmOk = document.getElementById('confirm-ok');
 const confirmCancel = document.getElementById('confirm-cancel');
 
-/* ── Render Scenarios ── */
-SCENARIOS.forEach(s => {
-  const btn = document.createElement('button');
-  btn.className = 'scenario-btn rpg-btn';
-  btn.innerHTML = `<div class="inner"><div class="s-title">${s.title}</div><div class="s-desc">${s.desc}</div></div>`;
-  btn.addEventListener('click', () => startChat(s));
-  scenarioList.appendChild(btn);
+/* ── Custom Scenarios ── */
+const CUSTOM_SCENARIOS_KEY = 'galgame_custom_scenarios';
+
+function readCustomScenarios() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(CUSTOM_SCENARIOS_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed.filter(s => s && s.id) : [];
+  } catch { return []; }
+}
+
+function writeCustomScenarios(list) {
+  localStorage.setItem(CUSTOM_SCENARIOS_KEY, JSON.stringify(list));
+}
+
+function createScenarioId() {
+  return 'cs-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
+}
+
+/* ── Scenario Editor State ── */
+const scenarioEditOverlay = document.getElementById('scenario-edit-overlay');
+const scenarioEditBox = document.getElementById('scenario-edit-box');
+const scenarioEditTitle = document.getElementById('scenario-edit-title');
+const seTitle = document.getElementById('se-title');
+const seDesc = document.getElementById('se-desc');
+const seLocation = document.getElementById('se-location');
+const seScenes = document.getElementById('se-scenes');
+const seDialogues = document.getElementById('se-dialogues');
+const seContext = document.getElementById('se-context');
+const btnScenarioSave = document.getElementById('btn-scenario-save');
+const btnScenarioCancel = document.getElementById('btn-scenario-cancel');
+const btnCloseScenarioEdit = document.getElementById('btn-close-scenario-edit');
+const btnAddScenario = document.getElementById('btn-add-scenario');
+
+let editingScenarioId = null;
+
+function openScenarioEditor(scenario) {
+  if (scenario) {
+    editingScenarioId = scenario.id;
+    scenarioEditTitle.textContent = '— 编 辑 场 景 —';
+    seTitle.value = scenario.title || '';
+    seDesc.value = scenario.desc || '';
+    seLocation.value = scenario.location || '';
+    seScenes.value = (scenario.scenes || []).join('\n');
+    seDialogues.value = (scenario.dialogues || []).join('\n');
+    seContext.value = scenario.context || '';
+  } else {
+    editingScenarioId = null;
+    scenarioEditTitle.textContent = '— 新 建 场 景 —';
+    seTitle.value = '';
+    seDesc.value = '';
+    seLocation.value = '';
+    seScenes.value = '';
+    seDialogues.value = '';
+    seContext.value = '';
+  }
+  scenarioEditOverlay.classList.add('active');
+  scenarioEditOverlay.classList.add('overlay-bg');
+}
+
+function closeScenarioEditor() {
+  scenarioEditOverlay.classList.remove('active');
+  editingScenarioId = null;
+}
+
+function saveScenarioFromEditor() {
+  const title = seTitle.value.trim();
+  if (!title) { seTitle.focus(); return; }
+
+  const scenarioData = {
+    title,
+    desc: seDesc.value.trim(),
+    location: seLocation.value.trim(),
+    scenes: seScenes.value.split('\n').map(l => l.trim()).filter(Boolean),
+    dialogues: seDialogues.value.split('\n').map(l => l.trim()).filter(Boolean),
+    context: seContext.value.trim(),
+  };
+
+  if (scenarioData.scenes.length === 0) scenarioData.scenes = [''];
+  if (scenarioData.dialogues.length === 0) scenarioData.dialogues = ['……'];
+
+  const customs = readCustomScenarios();
+
+  if (editingScenarioId) {
+    const idx = customs.findIndex(s => s.id === editingScenarioId);
+    if (idx >= 0) {
+      customs[idx] = { ...customs[idx], ...scenarioData };
+    }
+  } else {
+    customs.push({
+      ...scenarioData,
+      id: createScenarioId(),
+      custom: true,
+    });
+  }
+
+  writeCustomScenarios(customs);
+  closeScenarioEditor();
+  renderScenarioList();
+}
+
+async function deleteCustomScenario(id) {
+  const scenario = readCustomScenarios().find(s => s.id === id);
+  if (!scenario) return;
+
+  const confirmed = await askConfirmation({
+    title: '删除场景',
+    message: `确定删除「${scenario.title}」吗？\n删除后无法恢复。`,
+    confirmText: '删除',
+    danger: true,
+  });
+  if (!confirmed) return;
+
+  const customs = readCustomScenarios().filter(s => s.id !== id);
+  writeCustomScenarios(customs);
+  renderScenarioList();
+}
+
+/* ── Render Scenario List ── */
+function renderScenarioList() {
+  scenarioList.innerHTML = '';
+
+  /* Preset scenarios */
+  SCENARIOS.forEach(s => {
+    const btn = document.createElement('button');
+    btn.className = 'scenario-btn rpg-btn';
+    btn.innerHTML = `<div class="inner"><div class="s-title">${s.title}</div><div class="s-desc">${s.desc}</div></div>`;
+    btn.addEventListener('click', () => startChat(s));
+    scenarioList.appendChild(btn);
+  });
+
+  /* Custom scenarios */
+  const customs = readCustomScenarios();
+  if (customs.length > 0) {
+    const divider = document.createElement('div');
+    divider.className = 'settings-label';
+    divider.style.cssText = 'margin-top:14px; margin-bottom:8px; color:#666;';
+    divider.textContent = '— 自定义场景 —';
+    scenarioList.appendChild(divider);
+  }
+
+  customs.forEach(s => {
+    const wrap = document.createElement('div');
+    wrap.className = 'scenario-btn-wrap';
+
+    const btn = document.createElement('button');
+    btn.className = 'scenario-btn rpg-btn';
+    btn.innerHTML = `<div class="inner" style="padding-right:60px;"><div class="s-title">${s.title}</div><div class="s-desc">${s.desc || ''}</div></div>`;
+    btn.addEventListener('click', () => startChat(s));
+
+    const actions = document.createElement('div');
+    actions.className = 'scenario-actions';
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'scenario-action-btn rpg-btn';
+    editBtn.textContent = '✎';
+    editBtn.title = '编辑';
+    editBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openScenarioEditor(s);
+    });
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'scenario-action-btn danger rpg-btn';
+    delBtn.textContent = '✕';
+    delBtn.title = '删除';
+    delBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteCustomScenario(s.id);
+    });
+
+    actions.append(editBtn, delBtn);
+    wrap.append(btn, actions);
+    scenarioList.appendChild(wrap);
+  });
+}
+
+renderScenarioList();
+
+/* Editor event listeners */
+btnAddScenario.addEventListener('click', () => openScenarioEditor(null));
+btnScenarioSave.addEventListener('click', saveScenarioFromEditor);
+btnScenarioCancel.addEventListener('click', closeScenarioEditor);
+btnCloseScenarioEdit.addEventListener('click', closeScenarioEditor);
+
+scenarioEditOverlay.addEventListener('click', (e) => {
+  if (e.target === scenarioEditOverlay) closeScenarioEditor();
 });
+scenarioEditBox.addEventListener('click', (e) => e.stopPropagation());
 
 function startChat(scenario) {
   currentScenario = scenario;
@@ -1610,6 +1899,7 @@ document.getElementById('btn-back').addEventListener('click', () => {
   clearTypingTimers();
   chatScreen.classList.remove('active');
   selectScreen.classList.add('active');
+  renderScenarioList();
   updateSaveMenu();
 });
 
