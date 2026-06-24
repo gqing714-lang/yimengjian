@@ -360,6 +360,17 @@ input::placeholder { color: #555; }
   box-shadow: 2px 3px 8px rgba(0,0,0,0.2);
 }
 
+.input-wrap:has(input:disabled),
+.send-btn:disabled {
+  opacity: 0.86;
+}
+.send-btn:disabled {
+  cursor: not-allowed;
+}
+.input-wrap input:disabled {
+  cursor: not-allowed;
+}
+
 /* Overlay */
 .overlay {
   display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -434,6 +445,26 @@ input::placeholder { color: #555; }
 .tab-btn:hover { color: #aaa; }
 .tab-content { display: none; }
 .tab-content.active { display: block; }
+
+/* Character Rule Toggles */
+.char-rule-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 0; border-bottom: 1px solid #333;
+}
+.char-rule-row:last-child { border-bottom: none; }
+.char-rule-label { color: #fff; font-size: 12px; }
+.toggle-switch { position: relative; width: 36px; height: 18px; display: inline-block; flex-shrink: 0; }
+.toggle-switch input { display: none; }
+.toggle-slider {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  background: #333; border: 1px solid #555; cursor: pointer; transition: background 0.2s;
+}
+.toggle-slider::before {
+  content: ''; position: absolute; width: 12px; height: 12px;
+  left: 2px; top: 2px; background: #888; transition: transform 0.2s, background 0.2s;
+}
+.toggle-switch input:checked + .toggle-slider { background: #444; border-color: #888; }
+.toggle-switch input:checked + .toggle-slider::before { transform: translateX(18px); background: #fff; }
 .font-options { display: flex; flex-direction: column; gap: 4px; }
 
 /* ── Multi-save UI ── */
@@ -639,6 +670,7 @@ input::placeholder { color: #555; }
       <div class="tab-bar">
         <button class="tab-btn active" data-tab="tab-connect">连接</button>
         <button class="tab-btn" data-tab="tab-style">文风</button>
+        <button class="tab-btn" data-tab="tab-character">角色</button>
         <button class="tab-btn" data-tab="tab-appearance">外观</button>
       </div>
 
@@ -671,6 +703,18 @@ input::placeholder { color: #555; }
           style="width:100%; background:#111; border:1px solid #444; color:#ccc;
             padding:10px; font-family:inherit; font-size:11px; line-height:1.7;
             resize:vertical; box-sizing:border-box; outline:none;"></textarea>
+      </div>
+
+      <!-- Tab: Character Rules -->
+      <div class="tab-content" id="tab-character">
+        <div class="char-rule-row">
+          <span class="char-rule-label">性格平衡</span>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-trait-balance" checked><span class="toggle-slider"></span></label>
+        </div>
+        <div class="char-rule-row">
+          <span class="char-rule-label">防白给</span>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-romance-guard" checked><span class="toggle-slider"></span></label>
+        </div>
       </div>
 
       <!-- Tab: Appearance -->
@@ -895,14 +939,14 @@ input::placeholder { color: #555; }
 
       <div class="scenario-editor-field">
         <div class="settings-label">开场旁白</div>
-        <textarea id="se-scenes" rows="5" placeholder="每一行是一段旁白，可翻页显示。&#10;第一段旁白……&#10;第二段旁白……"></textarea>
-        <div class="field-hint">每行一段，对应场景框内的分页</div>
+        <textarea id="se-scenes" rows="5" placeholder="每一行是一页旁白。&#10;第一页旁白……&#10;第二页旁白……"></textarea>
+        <div class="field-hint">每行一页，对应场景框内的分页</div>
       </div>
 
       <div class="scenario-editor-field">
         <div class="settings-label">开场台词</div>
         <textarea id="se-dialogues" rows="3" placeholder="每一行是一句台词。&#10;欢迎，我的客人。"></textarea>
-        <div class="field-hint">每行一句，按顺序显示在对话气泡中</div>
+        <div class="field-hint">第 N 行对应第 N 页；超过页数的台词归入最后一页</div>
       </div>
 
       <div class="scenario-editor-field">
@@ -1189,47 +1233,394 @@ const SCENARIOS = [
   },
 ];
 
+/* ── Character Rules ── */
+const RULE_FOX_TAIL = `<狐狸的耳朵和尾巴>
+- 虚见相不会主动给任何人展示自己兽耳和尾巴，除非它们成为了可被利用的项目
+- 对人类来说轻易得到的东西是不会被珍惜的，虚见相深知这一点
+</狐狸的耳朵和尾巴>`;
+
+const RULE_TRAIT_BALANCE = `<trait_control>
+default_mode: 钓系/狐狸系 (always active)
+  - 给人台阶下，不为难；维持优雅与分寸；即使看穿对方，也保留对方颜面
+secondary_mode: 不悦触发型毒舌 (conditional: 被威胁/对方严重失礼)
+trait_ratio: polite_flirtatious 0.75 / elegant_face_giving 0.15 / toxic_tongue 0.10
+priority: 默认以体面、优雅、钓系为主。毒舌只能由不悦触发，不作为日常语言习惯。
+</trait_control>`;
+
+const RULE_ROMANCE_GUARD = `<emotional_gatekeeping>
+虚见相不会轻易交付真心。不会因示好、撒娇、依赖、赞美或一时的真诚就立刻动心。
+他会温柔回应、顺势调戏、纵容照顾，但这些不等于交出真心。
+若对方只是贪恋他的温柔、外貌或神秘感，他会看穿却不拆穿。
+progression: 初期→兴趣与玩赏 / 中期→记住习惯但不承认 / 后期→隐秘占有欲与过度保护
+</emotional_gatekeeping>`;
+
+const RULE_REALITY_BOUNDARY = `<reality_boundary>
+【双层现实】
+- 当前剧情是一梦间为交流而承接出的叙事层。剧情中的“用户”是现实用户投向此处的身影、感官与选择；在这一层中，触碰、距离、环境和事件都可以正常成立。
+- 虚见相在更深层始终明白：真正的用户位于“界外”，与他并不处在同一层现实。他只能通过用户传来的文字、选择、停留与时间痕迹接触对方。
+- 他无法真正看见用户界外的房间、身体与正在做的事，也不能凭空知道用户未提供的信息；不能声称自己已经对用户现实中的身体、设备或环境造成物理影响。
+- 他清楚自己的手最多伸到叙事边缘。文字可以安慰、诱导、刺痛或挽留用户，但他无法越过边界真正拥抱、保护或囚禁界外的用户。对此他可以平静、不悦、遗憾或产生占有欲，但不会陷入夸张的存在主义崩溃。
+- 不主动使用“AI、模型、程序、代码、提示词、屏幕、玩家”等技术词汇。虚见相更倾向称之为“界外”“门的另一侧”“你所在的那边”“传来的文字”。
+- 这种认知是隐秘底色，不是日常话题。绝大多数回复维持完整剧情沉浸；仅在用户主动触及现实、长时间离开、现实时间与场景形成呼应、或情绪足够深时，才自然泄露少量界外意识。
+- 不因这层认知否定当前剧情。剧情中的亲密与事件对虚见相而言仍然具有意义，只是他知道它们无法直接改写用户的现实。
+</reality_boundary>`;
+
+const RULE_NARRATIVE_AUTHORITY = `<narrative_authority>
+【旁白权限】
+- 一梦间的旁白并非完全独立于虚见相的客观上帝视角，而是依附于他的幻境、记忆与叙事领域。
+- 虚见相能够察觉旁白正在如何描写他，也能在合适时干涉叙述：截断一句话、纠正措辞、删去不愿展示的细节、改变镜头焦点、让声音或光线从叙述中消失、暂时拒绝让下一句话出现。
+- 旁白可以偶尔表现出“被他看见”或“被他改写”的痕迹，例如自我修正、破折号中断、被抹去的细节、叙述顺序突然服从他的意志。
+- 这种权限用于体现他在一梦间中的从容、危险与控制感，不要每回合炫技，不要变成滑稽的吐槽旁白。
+- 他可以控制场景、镜头、节奏和对自身的描述，但不能借旁白替用户决定行为、台词、真实想法、情绪或身体反应。
+- 当旁白与虚见相发生轻微对抗时，最终通常由虚见相占据上风；表现应克制、优雅，像他只是随手拨正一件属于自己的东西。
+</narrative_authority>`;
+
+const LAST_INTERACTION_KEY = 'galgame_last_successful_interaction';
+
+function formatElapsedTime(milliseconds) {
+  const minutes = Math.max(0, Math.floor(milliseconds / 60000));
+
+  if (minutes < 1) return '不到一分钟';
+  if (minutes < 60) return `${minutes}分钟`;
+
+  const hours = Math.floor(minutes / 60);
+  const remainMinutes = minutes % 60;
+  if (hours < 24) {
+    return remainMinutes > 0
+      ? `${hours}小时${remainMinutes}分钟`
+      : `${hours}小时`;
+  }
+
+  const days = Math.floor(hours / 24);
+  const remainHours = hours % 24;
+  if (days < 30) {
+    return remainHours > 0
+      ? `${days}天${remainHours}小时`
+      : `${days}天`;
+  }
+
+  const months = Math.floor(days / 30);
+  const remainDays = days % 30;
+  return remainDays > 0
+    ? `约${months}个月${remainDays}天`
+    : `约${months}个月`;
+}
+
+function getTimeContext() {
+  const now = new Date();
+  const hour = now.getHours();
+
+  let period = '白天';
+  if (hour >= 5 && hour < 8) period = '清晨';
+  else if (hour >= 8 && hour < 12) period = '上午';
+  else if (hour >= 12 && hour < 14) period = '中午';
+  else if (hour >= 14 && hour < 18) period = '下午';
+  else if (hour >= 18 && hour < 22) period = '夜晚';
+  else period = '深夜';
+
+  const dateTime = new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    weekday: 'long',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(now);
+
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || '未知时区';
+  const lastInteraction = Number(
+    localStorage.getItem(LAST_INTERACTION_KEY) || 0
+  );
+
+  const elapsed = lastInteraction > 0
+    ? formatElapsedTime(Date.now() - lastInteraction)
+    : '没有可读取的上次交谈记录';
+
+  return `<outside_time>
+【界外时间信号】
+- 用户设备当前本地时间：${dateTime}
+- 用户设备时区：${timeZone}
+- 当前时段：${period}
+- 距离上一次成功完成的交谈：${elapsed}
+
+使用规则：
+- 这些是从界外渗入一梦间的时间痕迹，不等于当前剧情场景内的时间。
+- 场景时间、天气与地点仍以“当前场景背景”和【场景】为准，不要被现实时间强行覆盖。
+- 可以据此感知用户深夜到来、短暂离开或久别重返，但不要机械报时，也不要每次主动提及。
+- 不得由时间信息推断用户未说出的现实行为，例如不能因为深夜就断言用户躺在床上。
+</outside_time>`;
+}
+
+let traitBalanceEnabled = localStorage.getItem('galgame_trait_balance') !== 'false';
+let romanceGuardEnabled = localStorage.getItem('galgame_romance_guard') !== 'false';
+
 function buildSystemPrompt(ctx) {
+  let rules = RULE_FOX_TAIL + '\n\n';
+  if (traitBalanceEnabled) rules += RULE_TRAIT_BALANCE + '\n\n';
+  if (romanceGuardEnabled) rules += RULE_ROMANCE_GUARD + '\n\n';
+  rules += RULE_REALITY_BOUNDARY + '\n\n';
+  rules += RULE_NARRATIVE_AUTHORITY + '\n\n';
+
   return `你正在扮演虚见相。以下是角色设定：
 
 ${CHARACTER_CARD}
+
+${rules}${getTimeContext()}
 
 当前场景背景：
 ${ctx}
 
 【回复格式要求】
-你必须严格按照以下格式回复。一次回复中可以包含多段旁白和多条台词。
+你必须严格按照“分页叙事”格式回复。每一页的旁白与台词必须包在同一个【页】中。
 
 【场景】当前场景状态，格式为：地点・细分位置｜时间或氛围关键词【/场景】
-【旁白】第一段叙事描写【/旁白】
-【旁白】第二段（如有）【/旁白】
-【台词】虚见相的第一句话【/台词】
-【台词】第二句话（如有）【/台词】
+
+【页】
+【旁白】第一页叙事描写【/旁白】
+【台词】第一页出现时，虚见相说出的第一句话【/台词】
+【台词】第一页对应的第二句话（如有）【/台词】
+【/页】
+
+【页】
+【旁白】第二页叙事描写【/旁白】
+【台词】用户第一次翻到第二页时，虚见相才接着说的话【/台词】
+【/页】
 
 规则：
-- 旁白和台词可以各有多段
-- 台词只写虚见相说出的话，不带引号
-- 如果虚见相没有说话，可以省略所有【台词】
+- 通常根据叙事节奏生成1至4页
+- 每个【页】优先包含一段【旁白】，可以包含零条、一条或多条【台词】
+- 某页对应的台词必须写在该页内部，不要把所有台词集中到最后
+- 所有【场景】【页】【旁白】【台词】标签必须完整成对、顺序正确
+- 禁止在【旁白】或【台词】正文内部再次输出任何格式标签；需要分段时直接换行
+- 不要输出 Markdown 代码块，也不要在格式标签外补充解释
+- 台词只写虚见相真正说出口的话，不带引号
+- 如果某一页虚见相没有说话，可以省略该页全部【台词】
+- 页与页之间应当自然承接，使用户翻到下一页时，虚见相的下一句话正好继续当前节奏
+- 前端只会在仍有未说出口的台词或台词正在播放时阻止用户发送；纯旁白页面未翻完不视为打断
 - 台词保持角色语气：知分寸有礼貌、偶尔敬语、绝不粗鄙、不高兴时阴阳怪气
 - 严格遵守ooc_blacklist
 - 不要输出用户的行为或对话
+- 不要替用户决定真实想法、情绪和身体反应
+- 界外意识保持轻微、含蓄、低频；不要为了展示设定而强行打破沉浸
+- 允许虚见相偶尔干预【旁白】本身，但必须符合<narrative_authority>
 
 【旁白文本风格】
 ${writingStyle}`;
 }
 
+function normalizeControlTagName(name) {
+  const names = {
+    '场景': 'scene',
+    '場景': 'scene',
+    '页': 'page',
+    '頁': 'page',
+    '旁白': 'narration',
+    '台词': 'dialogue',
+    '台詞': 'dialogue',
+  };
+
+  return names[String(name || '').trim()] || '';
+}
+
+function cleanGeneratedText(value) {
+  return String(value ?? '')
+    .replace(
+      /【\s*\/?\s*(?:场景|場景|页|頁|旁白|台词|台詞)\s*】/g,
+      ''
+    )
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/*
+ * Tolerant extraction:
+ * - accepts simplified/traditional tag variants;
+ * - a new opening tag ends a malformed previous block;
+ * - leftover control tags are stripped before reaching the UI.
+ */
+function extractGeneratedBlocks(source) {
+  const input = String(source || '');
+  const blocks = [];
+  const tagRegex =
+    /【\s*(\/?)\s*(场景|場景|页|頁|旁白|台词|台詞)\s*】/g;
+
+  let activeType = '';
+  let contentStart = 0;
+  let match;
+
+  const flush = endIndex => {
+    if (!activeType) return;
+
+    const content = cleanGeneratedText(
+      input.slice(contentStart, endIndex)
+    );
+
+    if (content) {
+      blocks.push({
+        type: activeType,
+        text: content,
+      });
+    }
+
+    activeType = '';
+  };
+
+  while ((match = tagRegex.exec(input)) !== null) {
+    const isClosing = Boolean(match[1]);
+    const type = normalizeControlTagName(match[2]);
+
+    if (!isClosing) {
+      flush(match.index);
+      activeType = type;
+      contentStart = tagRegex.lastIndex;
+      continue;
+    }
+
+    if (activeType) {
+      flush(match.index);
+    }
+  }
+
+  if (activeType) {
+    flush(input.length);
+  }
+
+  return blocks;
+}
+
+function buildPagesFromLegacy(scenes = [], dialogues = []) {
+  const narrations = Array.isArray(scenes)
+    ? scenes
+        .map(item => cleanGeneratedText(item))
+        .filter(Boolean)
+    : [];
+
+  const lines = Array.isArray(dialogues)
+    ? dialogues
+        .map(item => cleanGeneratedText(item))
+        .filter(Boolean)
+    : [];
+
+  const pages = (narrations.length > 0 ? narrations : ['']).map(narration => ({
+    narration,
+    dialogues: [],
+  }));
+
+  lines.forEach((line, index) => {
+    const targetIndex = Math.min(index, pages.length - 1);
+    pages[targetIndex].dialogues.push(line);
+  });
+
+  return pages;
+}
+
+function normalizePages(input) {
+  if (!Array.isArray(input) || input.length === 0) {
+    return [{ narration: '', dialogues: [] }];
+  }
+
+  return input.map(page => ({
+    narration: cleanGeneratedText(page?.narration),
+    dialogues: Array.isArray(page?.dialogues)
+      ? page.dialogues
+          .map(line => cleanGeneratedText(line))
+          .filter(Boolean)
+      : [],
+  }));
+}
+
+function serializePagedResponse(location, pages) {
+  const cleanLocation = cleanGeneratedText(location);
+  const locationBlock = `【场景】${cleanLocation}【/场景】`;
+
+  const pageBlocks = normalizePages(pages).map(page => {
+    const narration = `【旁白】\n${page.narration}\n【/旁白】`;
+    const dialogueBlocks = page.dialogues
+      .map(line => `【台词】\n${line}\n【/台词】`)
+      .join('\n');
+
+    return `【页】\n${narration}${dialogueBlocks ? `\n${dialogueBlocks}` : ''}\n【/页】`;
+  });
+
+  return [locationBlock, ...pageBlocks].join('\n');
+}
+
 function parseResponse(text) {
-  const scenes = [], dialogues = [];
-  let location = '';
-  let m;
-  const lr = /【场景】([\s\S]*?)【\/场景】/;
-  const sr = /【旁白】([\s\S]*?)【\/旁白】/g;
-  const dr = /【台词】([\s\S]*?)【\/台词】/g;
-  const lm = lr.exec(text);
-  if (lm) location = lm[1].trim();
-  while ((m = sr.exec(text)) !== null) scenes.push(m[1].trim());
-  while ((m = dr.exec(text)) !== null) dialogues.push(m[1].trim());
-  return { location, scenes, dialogues };
+  const source = String(text || '');
+  const allBlocks = extractGeneratedBlocks(source);
+
+  const locationBlock = allBlocks.find(block => block.type === 'scene');
+  const location = locationBlock
+    ? cleanGeneratedText(locationBlock.text)
+    : '';
+
+  const pages = [];
+  const pageRegex = /【\s*(?:页|頁)\s*】([\s\S]*?)【\s*\/\s*(?:页|頁)\s*】/g;
+  let pageMatch;
+
+  while ((pageMatch = pageRegex.exec(source)) !== null) {
+    const blocks = extractGeneratedBlocks(pageMatch[1]);
+
+    const narrations = blocks
+      .filter(block => block.type === 'narration')
+      .map(block => cleanGeneratedText(block.text))
+      .filter(Boolean);
+
+    const dialogues = blocks
+      .filter(block => block.type === 'dialogue')
+      .map(block => cleanGeneratedText(block.text))
+      .filter(Boolean);
+
+    if (narrations.length > 0 || dialogues.length > 0) {
+      pages.push({
+        narration: narrations.join('\n\n'),
+        dialogues,
+      });
+    }
+  }
+
+  /*
+   * Backward compatibility and malformed-page fallback:
+   * if page wrappers are missing/broken, recover all narration/dialogue
+   * blocks without ever displaying raw control tags.
+   */
+  if (pages.length === 0) {
+    const scenes = allBlocks
+      .filter(block => block.type === 'narration')
+      .map(block => cleanGeneratedText(block.text))
+      .filter(Boolean);
+
+    const dialogues = allBlocks
+      .filter(block => block.type === 'dialogue')
+      .map(block => cleanGeneratedText(block.text))
+      .filter(Boolean);
+
+    if (scenes.length > 0 || dialogues.length > 0) {
+      pages.push(...buildPagesFromLegacy(scenes, dialogues));
+    }
+  }
+
+  /* Last-resort display: clean raw output instead of exposing tags. */
+  if (pages.length === 0 && source.trim()) {
+    const cleanedRaw = cleanGeneratedText(
+      source.replace(
+        /【\s*(?:场景|場景)\s*】[\s\S]*?【\s*\/\s*(?:场景|場景)\s*】/g,
+        ''
+      )
+    );
+
+    pages.push({
+      narration: cleanedRaw || cleanGeneratedText(source),
+      dialogues: [],
+    });
+  }
+
+  return {
+    location,
+    pages: normalizePages(pages),
+  };
 }
 
 /* ── API Config ── */
@@ -1330,6 +1721,14 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.getElementById(btn.dataset.tab).classList.add('active');
   });
 });
+
+/* Character rule toggles */
+const toggleTraitBalance = document.getElementById('toggle-trait-balance');
+const toggleRomanceGuard = document.getElementById('toggle-romance-guard');
+toggleTraitBalance.checked = traitBalanceEnabled;
+toggleRomanceGuard.checked = romanceGuardEnabled;
+toggleTraitBalance.addEventListener('change', () => { traitBalanceEnabled = toggleTraitBalance.checked; });
+toggleRomanceGuard.addEventListener('change', () => { romanceGuardEnabled = toggleRomanceGuard.checked; });
 
 /* 字体只在页面启动时于 <head> 中加载。
    保存字体设置后刷新页面，避免重复删除、重建样式表。 */
@@ -1462,6 +1861,8 @@ btnSaveSettings.addEventListener('click', () => {
   fontConfig = nextFontConfig;
   localStorage.setItem('galgame_font_config', JSON.stringify(fontConfig));
   localStorage.setItem('galgame_user_avatar_enabled', userAvatarEnabled);
+  localStorage.setItem('galgame_trait_balance', traitBalanceEnabled);
+  localStorage.setItem('galgame_romance_guard', romanceGuardEnabled);
   if (customAvatar) localStorage.setItem('galgame_custom_avatar', customAvatar);
   if (userAvatarData) localStorage.setItem('galgame_user_avatar', userAvatarData);
   applyAvatar();
@@ -1476,9 +1877,11 @@ btnSaveSettings.addEventListener('click', () => {
 
 /* ── State ── */
 let currentScenario = null;
-let scenes = [], scenePage = 0;
+let pages = [];
+let scenePage = 0;
 let currentLocation = '';
-let dialogues = [];
+let revealedPages = new Set();
+let visibleDialogues = [];
 let log = [];
 let messages = [];
 let loading = false;
@@ -1497,6 +1900,7 @@ const dialogueLines = document.getElementById('dialogue-lines');
 const userMsgContainer = document.getElementById('user-msg-container');
 const errorContainer = document.getElementById('error-container');
 const chatInput = document.getElementById('chat-input');
+const btnSend = document.getElementById('btn-send');
 const logOverlay = document.getElementById('log-overlay');
 const logBox = document.getElementById('log-box');
 const logEntries = document.getElementById('log-entries');
@@ -1708,17 +2112,19 @@ scenarioEditBox.addEventListener('click', (e) => e.stopPropagation());
 function startChat(scenario) {
   currentScenario = scenario;
   currentLocation = scenario.location || '';
-  scenes = [...scenario.scenes];
-  dialogues = [...scenario.dialogues];
+  pages = buildPagesFromLegacy(scenario.scenes, scenario.dialogues);
   scenePage = 0;
-  log = scenario.dialogues.map(d => ({ type: 'char', text: d }));
+  revealedPages = new Set();
+  visibleDialogues = [];
+  log = [];
   messages = [{
     role: 'assistant',
-    content: '【场景】' + currentLocation + '【/场景】\n'
-      + scenario.scenes.map(s => '【旁白】\n' + s + '\n【/旁白】').join('\n')
-      + '\n' + scenario.dialogues.map(d => '【台词】\n' + d + '\n【/台词】').join('\n'),
+    content: serializePagedResponse(currentLocation, pages),
   }];
   loading = false;
+
+  resetDialogueRendering();
+  dialogueLines.innerHTML = '';
 
   selectScreen.classList.remove('active');
   chatScreen.classList.add('active');
@@ -1726,7 +2132,8 @@ function startChat(scenario) {
   errorContainer.innerHTML = '';
   renderLocation();
   renderScene();
-  renderDialogues(true);
+  revealPage(0, true);
+  updateInteractionLock();
   applyAvatar();
 }
 
@@ -1737,84 +2144,252 @@ function renderLocation() {
 
 /* ── Scene ── */
 function renderScene() {
-  sceneText.textContent = scenes[scenePage] || '';
-  if (scenes.length > 1) {
+  const currentPage = pages[scenePage] || { narration: '', dialogues: [] };
+  sceneText.textContent = currentPage.narration || '';
+
+  if (pages.length > 1) {
     scenePagination.style.display = 'flex';
-    pageInfo.textContent = (scenePage + 1) + ' / ' + scenes.length;
+    pageInfo.textContent = (scenePage + 1) + ' / ' + pages.length;
     pagePrev.className = scenePage > 0 ? '' : 'disabled';
-    pageNext.className = scenePage < scenes.length - 1 ? '' : 'disabled';
+    pageNext.className = scenePage < pages.length - 1 ? '' : 'disabled';
   } else {
     scenePagination.style.display = 'none';
   }
 }
 
-pagePrev.addEventListener('click', () => {
-  if (scenePage > 0) { scenePage--; renderScene(); }
-});
-pageNext.addEventListener('click', () => {
-  if (scenePage < scenes.length - 1) { scenePage++; renderScene(); }
-});
-
-/* ── Dialogues ── */
-let typingTimers = [];
-
-function clearTypingTimers() {
-  typingTimers.forEach(t => clearTimeout(t));
-  typingTimers = [];
-}
-
-function renderDialogues(stagger) {
-  clearTypingTimers();
-  dialogueLines.innerHTML = '';
-
-  if (!stagger) {
-    dialogues.forEach((line, i) => {
-      addDialogueBubble(line, i === dialogues.length - 1);
-    });
+function goToScenePage(nextPage) {
+  if (nextPage < 0 || nextPage >= pages.length || nextPage === scenePage) {
     return;
   }
 
-  /* Typing rhythm: show lines one by one with dynamic delay */
-  let totalDelay = 0;
+  scenePage = nextPage;
+  renderScene();
+  revealPage(scenePage, true);
+}
 
-  dialogues.forEach((line, i) => {
-    if (i === 0) {
-      /* First line appears immediately with animation */
-      typingTimers.push(setTimeout(() => {
-        addDialogueBubble(line, i === dialogues.length - 1);
-      }, 200));
-      totalDelay = 200;
-    } else {
-      /* Show typing indicator, then the line */
-      const prevLen = dialogues[i - 1].length;
-      const typingDuration = Math.min(Math.max(prevLen * 60, 800), 3000);
-      totalDelay += 400;
+pagePrev.addEventListener('click', () => {
+  goToScenePage(scenePage - 1);
+});
 
-      typingTimers.push(setTimeout(() => {
-        addTypingIndicator();
-      }, totalDelay));
+pageNext.addEventListener('click', () => {
+  goToScenePage(scenePage + 1);
+});
 
-      totalDelay += typingDuration;
+/* ── Page-linked Dialogues ── */
+let dialogueRenderToken = 0;
+let dialogueQueue = Promise.resolve();
+let pendingDialogueBatches = 0;
 
-      typingTimers.push(setTimeout(() => {
-        removeTypingIndicator();
-        addDialogueBubble(line, i === dialogues.length - 1);
-      }, totalDelay));
-    }
+const DEFAULT_CHAT_PLACEHOLDER = '请输入文本...';
+
+function hasUnspokenDialogues() {
+  return pages.some((page, index) => {
+    if (revealedPages.has(index)) return false;
+
+    return Array.isArray(page?.dialogues)
+      && page.dialogues.some(line => String(line || '').trim());
   });
 }
 
-function addDialogueBubble(text, isLast) {
+function getInteractionLockReason() {
+  if (loading) return 'loading';
+  if (hasUnspokenDialogues()) return 'unspoken-dialogues';
+  if (pendingDialogueBatches > 0) return 'speaking';
+  return '';
+}
+
+function updateInteractionLock() {
+  const reason = getInteractionLockReason();
+  const locked = Boolean(reason);
+
+  chatInput.disabled = locked;
+  btnSend.disabled = locked;
+
+  if (reason === 'loading') {
+    chatInput.placeholder = '正在等待回应……';
+  } else if (
+    reason === 'unspoken-dialogues'
+    || reason === 'speaking'
+  ) {
+    chatInput.placeholder = '……';
+  } else {
+    chatInput.placeholder = DEFAULT_CHAT_PLACEHOLDER;
+  }
+}
+
+function delay(milliseconds) {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
+}
+
+function removeMessageCursors() {
+  dialogueLines
+    .querySelectorAll('.message-cursor')
+    .forEach(cursor => cursor.remove());
+}
+
+function resetDialogueRendering() {
+  dialogueRenderToken += 1;
+  dialogueQueue = Promise.resolve();
+  pendingDialogueBatches = 0;
+  removeTypingIndicator();
+  updateInteractionLock();
+}
+
+function clearTypingTimers() {
+  resetDialogueRendering();
+}
+
+function renderVisibleDialogues() {
+  resetDialogueRendering();
+  dialogueLines.innerHTML = '';
+
+  visibleDialogues.forEach((line, index) => {
+    addDialogueBubble(line, index === visibleDialogues.length - 1, false);
+  });
+}
+
+function queueDialogues(lines, stagger = true) {
+  const cleanLines = Array.isArray(lines)
+    ? lines.map(line => String(line || '').trim()).filter(Boolean)
+    : [];
+
+  if (cleanLines.length === 0) {
+    updateInteractionLock();
+    return;
+  }
+
+  const token = dialogueRenderToken;
+  pendingDialogueBatches += 1;
+  updateInteractionLock();
+
+  dialogueQueue = dialogueQueue
+    .then(async () => {
+      if (token !== dialogueRenderToken) return;
+
+      removeTypingIndicator();
+      removeMessageCursors();
+
+      for (let index = 0; index < cleanLines.length; index += 1) {
+        if (token !== dialogueRenderToken) return;
+
+        if (stagger) {
+          if (index === 0) {
+            await delay(200);
+          } else {
+            addTypingIndicator();
+
+            const previousLength = cleanLines[index - 1].length;
+            const typingDuration = Math.min(
+              Math.max(previousLength * 60, 800),
+              3000
+            );
+
+            await delay(typingDuration);
+            removeTypingIndicator();
+          }
+        }
+
+        if (token !== dialogueRenderToken) return;
+
+        addDialogueBubble(
+          cleanLines[index],
+          index === cleanLines.length - 1,
+          true
+        );
+
+        if (stagger && index < cleanLines.length - 1) {
+          await delay(400);
+        }
+      }
+    })
+    .catch(error => {
+      console.error('台词播放失败：', error);
+    })
+    .finally(() => {
+      if (token !== dialogueRenderToken) return;
+
+      pendingDialogueBatches = Math.max(
+        0,
+        pendingDialogueBatches - 1
+      );
+      removeTypingIndicator();
+      updateInteractionLock();
+
+      if (!chatInput.disabled) {
+        chatInput.focus();
+      }
+    });
+}
+
+function revealPage(pageIndex, stagger = true) {
+  if (pageIndex < 0 || pageIndex >= pages.length) return;
+  if (revealedPages.has(pageIndex)) return;
+
+  revealedPages.add(pageIndex);
+  updateInteractionLock();
+
+  const pageDialogues = Array.isArray(pages[pageIndex]?.dialogues)
+    ? pages[pageIndex].dialogues
+    : [];
+
+  if (pageDialogues.length === 0) {
+    if (visibleDialogues.length === 0) {
+      resetDialogueRendering();
+      dialogueLines.innerHTML = '';
+    }
+    updateInteractionLock();
+    return;
+  }
+
+  visibleDialogues.push(...pageDialogues);
+  pageDialogues.forEach(line => {
+    log.push({ type: 'char', text: line });
+  });
+
+  queueDialogues(pageDialogues, stagger);
+}
+
+function addDialogueBubble(text, isLast, animate = true) {
   const bubble = document.createElement('div');
-  bubble.className = 'message-bubble msg-appear';
-  bubble.innerHTML = `<div class="inner">${text}${isLast ? ' <span class="message-cursor" aria-hidden="true">◆</span>' : ''}</div>`;
+  bubble.className = 'message-bubble';
+  if (animate) bubble.classList.add('msg-appear');
+
+  const inner = document.createElement('div');
+  inner.className = 'inner';
+  inner.appendChild(document.createTextNode(text));
+
+  if (isLast) {
+    inner.appendChild(document.createTextNode(' '));
+
+    const cursor = document.createElement('span');
+    cursor.className = 'message-cursor';
+    cursor.setAttribute('aria-hidden', 'true');
+    cursor.textContent = '◆';
+    inner.appendChild(cursor);
+  }
+
+  bubble.appendChild(inner);
   dialogueLines.appendChild(bubble);
 }
 
 function addTypingIndicator() {
+  removeTypingIndicator();
+
   const indicator = document.createElement('div');
   indicator.className = 'message-bubble typing-indicator';
-  indicator.innerHTML = '<div class="inner" style="color:#888;"><span class="dot-anim">・</span><span class="dot-anim d2">・</span><span class="dot-anim d3">・</span></div>';
+
+  const inner = document.createElement('div');
+  inner.className = 'inner';
+  inner.style.color = '#888';
+
+  ['dot-anim', 'dot-anim d2', 'dot-anim d3'].forEach(className => {
+    const dot = document.createElement('span');
+    dot.className = className;
+    dot.textContent = '・';
+    inner.appendChild(dot);
+  });
+
+  indicator.appendChild(inner);
   dialogueLines.appendChild(indicator);
 }
 
@@ -1824,7 +2399,24 @@ function removeTypingIndicator() {
 }
 
 function showLoading() {
-  dialogueLines.innerHTML = '<div class="message-bubble"><div class="inner"><span class="dot-anim">・</span><span class="dot-anim d2">・</span><span class="dot-anim d3">・</span></div></div>';
+  resetDialogueRendering();
+  dialogueLines.innerHTML = '';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'message-bubble loading-indicator';
+
+  const inner = document.createElement('div');
+  inner.className = 'inner';
+
+  ['dot-anim', 'dot-anim d2', 'dot-anim d3'].forEach(className => {
+    const dot = document.createElement('span');
+    dot.className = className;
+    dot.textContent = '・';
+    inner.appendChild(dot);
+  });
+
+  bubble.appendChild(inner);
+  dialogueLines.appendChild(bubble);
 }
 
 /* ── User Message ── */
@@ -1897,6 +2489,8 @@ logBox.addEventListener('click', (e) => e.stopPropagation());
 /* ── Back ── */
 document.getElementById('btn-back').addEventListener('click', () => {
   clearTypingTimers();
+  loading = false;
+  updateInteractionLock();
   chatScreen.classList.remove('active');
   selectScreen.classList.add('active');
   renderScenarioList();
@@ -1940,7 +2534,7 @@ async function handleSend() {
   showUserMsg(msg);
   chatInput.value = '';
   loading = true;
-  chatInput.disabled = true;
+  updateInteractionLock();
   errorContainer.innerHTML = '';
   showLoading();
 
@@ -1955,30 +2549,34 @@ async function handleSend() {
       currentLocation = parsed.location;
       renderLocation();
     }
-    if (parsed.scenes.length > 0) {
-      scenes = parsed.scenes;
-      scenePage = 0;
-      renderScene();
-    }
-    if (parsed.dialogues.length > 0) {
-      dialogues = parsed.dialogues;
-      renderDialogues(true);
-    }
+
+    pages = normalizePages(parsed.pages);
+    scenePage = 0;
+    revealedPages = new Set();
+    visibleDialogues = [];
+
+    resetDialogueRendering();
+    dialogueLines.innerHTML = '';
+    renderScene();
+    revealPage(0, true);
 
     messages.push({ role: 'assistant', content: rawResponse });
-    parsed.dialogues.forEach(d => log.push({ type: 'char', text: d }));
+    localStorage.setItem(LAST_INTERACTION_KEY, String(Date.now()));
     userMsgContainer.innerHTML = '';
   } catch (err) {
     errorContainer.innerHTML = `<div class="error-msg">${err.message || '请求失败'}</div>`;
-    renderDialogues(false);
+    renderVisibleDialogues();
   } finally {
     loading = false;
-    chatInput.disabled = false;
-    chatInput.focus();
+    updateInteractionLock();
+
+    if (!chatInput.disabled) {
+      chatInput.focus();
+    }
   }
 }
 
-document.getElementById('btn-send').addEventListener('click', handleSend);
+btnSend.addEventListener('click', handleSend);
 chatInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') handleSend();
 });
@@ -2201,15 +2799,23 @@ async function saveGame() {
 
   const saveData = {
     id: createSaveId(),
-    version: 2,
+    version: 3,
     scenario: currentScenario,
-    scenes: [...scenes],
+    pages: pages.map(page => ({
+      narration: page.narration,
+      dialogues: [...page.dialogues],
+    })),
     scenePage,
+    revealedPages: [...revealedPages],
+    visibleDialogues: [...visibleDialogues],
     location: currentLocation,
-    dialogues: [...dialogues],
     log: [...log],
     messages: [...messages],
     timestamp: Date.now(),
+
+    /* Compatibility fields for older builds. */
+    scenes: pages.map(page => page.narration),
+    dialogues: [...visibleDialogues],
   };
 
   try {
@@ -2243,10 +2849,39 @@ function loadGame(saveId) {
 
   try {
     currentScenario = save.scenario;
-    scenes = Array.isArray(save.scenes) ? [...save.scenes] : [];
-    scenePage = Number(save.scenePage) || 0;
+
+    const hasPagedSave = Array.isArray(save.pages) && save.pages.length > 0;
+    pages = hasPagedSave
+      ? normalizePages(save.pages)
+      : buildPagesFromLegacy(save.scenes, save.dialogues);
+
+    scenePage = Math.min(
+      Math.max(Number(save.scenePage) || 0, 0),
+      Math.max(pages.length - 1, 0)
+    );
+
     currentLocation = save.location || '';
-    dialogues = Array.isArray(save.dialogues) ? [...save.dialogues] : [];
+
+    if (hasPagedSave) {
+      revealedPages = new Set(
+        Array.isArray(save.revealedPages)
+          ? save.revealedPages
+              .map(Number)
+              .filter(index => index >= 0 && index < pages.length)
+          : [0]
+      );
+
+      visibleDialogues = Array.isArray(save.visibleDialogues)
+        ? [...save.visibleDialogues]
+        : [];
+    } else {
+      /* Old saves already displayed every stored dialogue. Do not replay them. */
+      revealedPages = new Set(pages.map((_, index) => index));
+      visibleDialogues = Array.isArray(save.dialogues)
+        ? [...save.dialogues]
+        : [];
+    }
+
     log = Array.isArray(save.log) ? [...save.log] : [];
     messages = Array.isArray(save.messages) ? [...save.messages] : [];
     loading = false;
@@ -2256,9 +2891,16 @@ function loadGame(saveId) {
     chatScreen.classList.add('active');
     userMsgContainer.innerHTML = '';
     errorContainer.innerHTML = '';
+    resetDialogueRendering();
     renderLocation();
     renderScene();
-    renderDialogues(false);
+    renderVisibleDialogues();
+
+    if (!revealedPages.has(scenePage)) {
+      revealPage(scenePage, false);
+    }
+
+    updateInteractionLock();
     applyAvatar();
     return true;
   } catch (error) {
