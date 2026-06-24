@@ -396,7 +396,38 @@ input::placeholder { color: #555; }
 .log-entry .label { color: #888; }
 .log-entry .label.user { color: #aaa; }
 
-.error-msg { color: #c33; font-size: 11px; margin-bottom: 8px; text-align: center; }
+.error-msg {
+  color: #c33;
+  font-size: 11px;
+  margin-bottom: 8px;
+  text-align: center;
+  line-height: 1.7;
+}
+.api-error-details {
+  max-width: 100%;
+  margin: 0 0 9px;
+  border: 1px solid #444;
+  background: #050505;
+  color: #888;
+  font-size: 9px;
+}
+.api-error-details summary {
+  padding: 6px 8px;
+  cursor: pointer;
+  user-select: none;
+}
+.api-error-details pre {
+  margin: 0;
+  padding: 8px;
+  max-height: 220px;
+  overflow: auto;
+  border-top: 1px solid #333;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.55;
+  font-family: inherit;
+  color: #777;
+}
 
 /* Settings */
 .settings-group { margin-bottom: 14px; }
@@ -2525,31 +2556,222 @@ document.getElementById('btn-back').addEventListener('click', () => {
 });
 
 /* ── API Call (OpenAI-compatible) ── */
+function extractMessageContent(message) {
+  const content = message?.content;
+
+  if (typeof content === 'string') {
+    return content;
+  }
+
+  if (Array.isArray(content)) {
+    return content
+      .map(part => {
+        if (typeof part === 'string') return part;
+        if (typeof part?.text === 'string') return part.text;
+        if (typeof part?.content === 'string') return part.content;
+        return '';
+      })
+      .filter(Boolean)
+      .join('');
+  }
+
+  return '';
+}
+
+function collectAPIDiagnostics(data, httpStatus) {
+  const choice = data?.choices?.[0] || {};
+  const candidate = data?.candidates?.[0] || {};
+
+  const finishReason =
+    choice.finish_reason
+    || choice.finishReason
+    || candidate.finishReason
+    || candidate.finish_reason
+    || '';
+
+  const promptFeedback =
+    data?.promptFeedback
+    || data?.prompt_feedback
+    || {};
+
+  const blockReason =
+    promptFeedback.blockReason
+    || promptFeedback.block_reason
+    || choice.block_reason
+    || choice.blockReason
+    || '';
+
+  const refusal =
+    choice?.message?.refusal
+    || choice?.refusal
+    || '';
+
+  const safetyRatings =
+    choice.safetyRatings
+    || choice.safety_ratings
+    || candidate.safetyRatings
+    || candidate.safety_ratings
+    || data?.safetyRatings
+    || data?.safety_ratings
+    || promptFeedback.safetyRatings
+    || promptFeedback.safety_ratings
+    || [];
+
+  return {
+    httpStatus,
+    finishReason,
+    blockReason,
+    refusal,
+    safetyRatings,
+    rawResponse: data,
+  };
+}
+
+function makeAPIError(message, diagnostics = null) {
+  const error = new Error(message);
+  error.apiDiagnostics = diagnostics;
+  return error;
+}
+
+function isSafetyLikeReason(value) {
+  return /(?:SAFETY|CONTENT_FILTER|PROHIBITED|BLOCKLIST|RECITATION|SPII)/i
+    .test(String(value || ''));
+}
+
+function describeEmptyResponse(diagnostics) {
+  const reason =
+    diagnostics?.finishReason
+    || diagnostics?.blockReason
+    || '';
+
+  if (
+    isSafetyLikeReason(diagnostics?.finishReason)
+    || isSafetyLikeReason(diagnostics?.blockReason)
+    || diagnostics?.refusal
+  ) {
+    return reason
+      ? `模型没有返回正文，可能触发安全过滤。停止原因：${reason}`
+      : '模型没有返回正文，可能触发安全过滤。';
+  }
+
+  if (reason) {
+    return `模型没有返回正文。停止原因：${reason}`;
+  }
+
+  return '模型没有返回正文，可能是安全过滤或接口返回异常。';
+}
+
+function hasMeaningfulParsedContent(parsed) {
+  return Array.isArray(parsed?.pages) && parsed.pages.some(page => {
+    const hasNarration = Boolean(String(page?.narration || '').trim());
+    const hasDialogue =
+      Array.isArray(page?.dialogues)
+      && page.dialogues.some(line => String(line || '').trim());
+
+    return hasNarration || hasDialogue;
+  });
+}
+
+function showRequestError(error) {
+  errorContainer.innerHTML = '';
+
+  const message = document.createElement('div');
+  message.className = 'error-msg';
+  message.textContent = error?.message || '请求失败';
+  errorContainer.appendChild(message);
+
+  if (!error?.apiDiagnostics) return;
+
+  const details = document.createElement('details');
+  details.className = 'api-error-details';
+
+  const summary = document.createElement('summary');
+  summary.textContent = '查看接口返回详情';
+
+  const pre = document.createElement('pre');
+  pre.textContent = JSON.stringify(error.apiDiagnostics, null, 2);
+
+  details.appendChild(summary);
+  details.appendChild(pre);
+  errorContainer.appendChild(details);
+}
+
 async function callAPI(msgs, systemPrompt) {
   if (!apiConfig.endpoint || !apiConfig.apiKey || !apiConfig.model) {
     throw new Error('请先在设置中配置 API 连接');
   }
+
   const openaiMsgs = [
     { role: 'system', content: systemPrompt },
     ...msgs,
   ];
-  const response = await fetch(apiConfig.endpoint + '/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + apiConfig.apiKey,
-    },
-    body: JSON.stringify({
-      model: apiConfig.model,
-      max_tokens: 1500,
-      messages: openaiMsgs,
-    }),
-  });
-  const data = await response.json();
-  if (data.choices && data.choices.length > 0) {
-    return data.choices[0].message?.content || '';
+
+  let response;
+
+  try {
+    response = await fetch(apiConfig.endpoint + '/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + apiConfig.apiKey,
+      },
+      body: JSON.stringify({
+        model: apiConfig.model,
+        max_tokens: 8192,
+        messages: openaiMsgs,
+      }),
+    });
+  } catch (networkError) {
+    throw new Error(
+      `网络请求失败：${networkError?.message || 'Failed to fetch'}`
+    );
   }
-  throw new Error(data.error?.message || 'API request failed');
+
+  const responseText = await response.text();
+  let data;
+
+  try {
+    data = responseText ? JSON.parse(responseText) : {};
+  } catch {
+    const diagnostics = {
+      httpStatus: response.status,
+      rawResponseText: responseText,
+    };
+
+    throw makeAPIError(
+      `接口返回的不是有效 JSON（HTTP ${response.status}）`,
+      diagnostics
+    );
+  }
+
+  const diagnostics = collectAPIDiagnostics(data, response.status);
+
+  if (!response.ok) {
+    const apiMessage =
+      data?.error?.message
+      || data?.message
+      || `HTTP ${response.status}`;
+
+    throw makeAPIError(
+      `接口请求失败：${apiMessage}`,
+      diagnostics
+    );
+  }
+
+  const choice = data?.choices?.[0];
+  const content = extractMessageContent(choice?.message).trim();
+
+  if (!content) {
+    throw makeAPIError(
+      describeEmptyResponse(diagnostics),
+      diagnostics
+    );
+  }
+
+  return {
+    content,
+    diagnostics,
+  };
 }
 
 /* ── Send ── */
@@ -2574,8 +2796,20 @@ async function handleSend() {
       currentScenario.context,
       metaPermission
     );
-    const rawResponse = await callAPI(messages, systemPrompt);
+
+    const apiResult = await callAPI(messages, systemPrompt);
+    const rawResponse = apiResult.content;
     const parsed = parseResponse(rawResponse);
+
+    if (!hasMeaningfulParsedContent(parsed)) {
+      throw makeAPIError(
+        '模型回复不完整：没有解析到旁白或台词，当前画面已保留。',
+        {
+          ...apiResult.diagnostics,
+          returnedContent: rawResponse,
+        }
+      );
+    }
 
     if (parsed.location) {
       currentLocation = parsed.location;
@@ -2602,7 +2836,26 @@ async function handleSend() {
     localStorage.setItem(LAST_INTERACTION_KEY, String(Date.now()));
     userMsgContainer.innerHTML = '';
   } catch (err) {
-    errorContainer.innerHTML = `<div class="error-msg">${err.message || '请求失败'}</div>`;
+    const lastMessage = messages[messages.length - 1];
+    if (
+      lastMessage?.role === 'user'
+      && lastMessage?.content === msg
+    ) {
+      messages.pop();
+    }
+
+    const lastLog = log[log.length - 1];
+    if (
+      lastLog?.type === 'user'
+      && lastLog?.text === msg
+    ) {
+      log.pop();
+    }
+
+    userMsgContainer.innerHTML = '';
+    chatInput.value = msg;
+
+    showRequestError(err);
     renderVisibleDialogues();
   } finally {
     loading = false;
