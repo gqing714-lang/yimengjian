@@ -1165,7 +1165,6 @@ const CHARACTER_CARD = `<info>
 
     common_expressions:
       daily_phrases:
-        - “这幅贪婪而自知的模样……总是能给我带来不少乐趣呢。”
         - “你的灵魂怎么会如此丑陋、如此惹人怜爱？”
 
   ooc_blacklist:
@@ -1355,12 +1354,39 @@ function getTimeContext() {
 let traitBalanceEnabled = localStorage.getItem('galgame_trait_balance') !== 'false';
 let romanceGuardEnabled = localStorage.getItem('galgame_romance_guard') !== 'false';
 
-function buildSystemPrompt(ctx) {
+const META_RANDOM_RATE = 0.05;
+const META_COOLDOWN_REPLIES = 8;
+
+let successfulReplyCount = 0;
+let lastMetaOpenReply = -META_COOLDOWN_REPLIES;
+
+function isUserMetaTrigger(message) {
+  const text = String(message || '');
+
+  return /(?:旁白|叙述者|叙事者|第四面墙|打破第四面墙|现实边界|故事边界|故事之外|故事外面|故事里面|身处故事|活在故事|界外|文字之外|页面之外|你能看到旁白|你知道自己是角色|你知道这是故事)/i.test(text);
+}
+
+function chooseMetaPermission(message, randomValue = Math.random()) {
+  if (isUserMetaTrigger(message)) return true;
+
+  const cooldownPassed =
+    successfulReplyCount - lastMetaOpenReply >= META_COOLDOWN_REPLIES;
+
+  return cooldownPassed && randomValue < META_RANDOM_RATE;
+}
+
+function buildSystemPrompt(ctx, metaPermission = false) {
   let rules = RULE_FOX_TAIL + '\n\n';
   if (traitBalanceEnabled) rules += RULE_TRAIT_BALANCE + '\n\n';
   if (romanceGuardEnabled) rules += RULE_ROMANCE_GUARD + '\n\n';
   rules += RULE_REALITY_BOUNDARY + '\n\n';
-  rules += RULE_NARRATIVE_AUTHORITY + '\n\n';
+
+  if (metaPermission) {
+    rules += RULE_NARRATIVE_AUTHORITY + '\n\n';
+    rules += '<meta_permission>true：本轮至多使用一次旁白权限。</meta_permission>\n\n';
+  } else {
+    rules += '<meta_permission>false：本轮不要主动提及或干预旁白。</meta_permission>\n\n';
+  }
 
   return `你正在扮演虚见相。以下是角色设定：
 
@@ -1403,7 +1429,6 @@ ${ctx}
 - 不要输出用户的行为或对话
 - 不要替用户决定真实想法、情绪和身体反应
 - 界外意识保持轻微、含蓄、低频；不要为了展示设定而强行打破沉浸
-- 允许虚见相偶尔干预【旁白】本身，但必须符合<narrative_authority>
 
 【旁白文本风格】
 ${writingStyle}`;
@@ -2121,6 +2146,8 @@ function startChat(scenario) {
     role: 'assistant',
     content: serializePagedResponse(currentLocation, pages),
   }];
+  successfulReplyCount = 0;
+  lastMetaOpenReply = -META_COOLDOWN_REPLIES;
   loading = false;
 
   resetDialogueRendering();
@@ -2540,8 +2567,13 @@ async function handleSend() {
 
   messages.push({ role: 'user', content: msg });
 
+  const metaPermission = chooseMetaPermission(msg);
+
   try {
-    const systemPrompt = buildSystemPrompt(currentScenario.context);
+    const systemPrompt = buildSystemPrompt(
+      currentScenario.context,
+      metaPermission
+    );
     const rawResponse = await callAPI(messages, systemPrompt);
     const parsed = parseResponse(rawResponse);
 
@@ -2561,6 +2593,12 @@ async function handleSend() {
     revealPage(0, true);
 
     messages.push({ role: 'assistant', content: rawResponse });
+
+    successfulReplyCount += 1;
+    if (metaPermission) {
+      lastMetaOpenReply = successfulReplyCount;
+    }
+
     localStorage.setItem(LAST_INTERACTION_KEY, String(Date.now()));
     userMsgContainer.innerHTML = '';
   } catch (err) {
@@ -2799,7 +2837,7 @@ async function saveGame() {
 
   const saveData = {
     id: createSaveId(),
-    version: 3,
+    version: 4,
     scenario: currentScenario,
     pages: pages.map(page => ({
       narration: page.narration,
@@ -2811,6 +2849,8 @@ async function saveGame() {
     location: currentLocation,
     log: [...log],
     messages: [...messages],
+    successfulReplyCount,
+    lastMetaOpenReply,
     timestamp: Date.now(),
 
     /* Compatibility fields for older builds. */
@@ -2884,6 +2924,15 @@ function loadGame(saveId) {
 
     log = Array.isArray(save.log) ? [...save.log] : [];
     messages = Array.isArray(save.messages) ? [...save.messages] : [];
+
+    successfulReplyCount = Number.isFinite(Number(save.successfulReplyCount))
+      ? Math.max(0, Number(save.successfulReplyCount))
+      : 0;
+
+    lastMetaOpenReply = Number.isFinite(Number(save.lastMetaOpenReply))
+      ? Number(save.lastMetaOpenReply)
+      : -META_COOLDOWN_REPLIES;
+
     loading = false;
 
     closeLoadOverlay();
